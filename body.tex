@@ -1,7 +1,25 @@
 \section{Introduction}
 
-{\bf Put your paper here }
-\vskip 0.4in
+The Vera C.\ Rubin Observatory is located on Cerro Pachon in Chile and consists of the 8.4\,m Simonyi Survey Telescope and the 1.2\,m Rubin Auxiliary Telescope.
+Over the course of 10 years the Rubin Observatory will take data for the Legacy Survey of Space and Time (LSST) and deliver 11 data releases \cite{2019ApJ...873..111I}.
+The Rubin Observatory generates a data volume of approximately 20\,TB per night and this data is handled using a Data Management System \cite{2022arXiv221113611O} that transfers the files from the summit to the US Data Facility hosted at the SLAC National Accelerator Laboratory (SLAC) and triggers the pipeline processing and makes the data available to the data access centers.
+The LSST Science Pipelines \cite{2019ASPC..523..521B} will be used to process the data and are designed such that neither the pipeline algorithmic code nor the scientist inspecting the data know where the data are stored or what data format they are stored in.
+The software abstraction layer we use for this is called the Data Butler. \cite{2019ASPC..523..653J,2022SPIE12189E..11J}
 
-This is the LSST overview paper: \cite{2008arXiv0805.2366I}.
+\section{The Data Butler}
 
+
+\section{Moving to the Cloud}
+
+The original operating plan for the LSST was to host the data at the National Center for Supercomputing Applications in Champaign-Urbana. \cite{2012SPIE.8451E..0VF}
+In this scenario the 10,000 science users that the archive was sized to support would all be given accounts directly at the archive center and access would be controlled directly on the file system using ACLs and on the databases using database accounts.
+With the move to SLAC as the archive center this approach was no longer feasible given that SLAC is a Department of Energy facility which has much tighter controls over who can be issued computer accounts and a much more detailed background check.
+Ten thousand accounts would take a significant amount of time to be processed and it was unacceptable to the project that some science users with data rights might not be able to acquire accounts at all.
+
+To solve this problem the project adopted a "hybrid cloud" solution where all the science users will be hosted on a commercial cloud and be given access via their educational instititution's accounts but the data would be stored at the US Data Facility at SLAC.
+In this way the DOE would not need to vet 10,000 users and we would proxy access through our infrastructure.
+We prototyped cloud hosting on Google using one of our Data Previews \cite{2021arXiv211115030O} and demonstrated that the deployment and support would work correctly with a few hundred science users.
+
+\section{Migrating to a Client/Server Architecture}
+
+\section{Conclusions}
