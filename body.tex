@@ -8,6 +8,67 @@ The software abstraction layer we use for this is called the Data Butler. \cite{
 
 \section{The Data Butler}
 
+The Rubin Observatory Data Butler concept has been in the data management plan from the very early days of the project \cite{2007ASPC..376....3K,2010SPIE.7740E..15A}.
+In 2017 \cite{LDM-563} we decided to rewrite the Butler library from scratch to take into account new technologies, clarified requirements, \cite{LDM-556} and lessons learned from previous implementations.
+This version, colloquially known as the ``generation 3 middleware'', was formally accepted by the project in 2022. \cite{DMTR-271}
+
+The Data Butler has been described in a previous paper \cite{2022SPIE12189E..11J} but the important concepts are dimension records, data coordinates, collections, dataset types, and formatters.
+
+\subsection{Dimension Records and Coordinates}
+
+The Butler registry assigns datasets specific coordinates within a dimensional space (what we call a ``dimension universe'').
+These dimensions generally refer to scientifically useful concepts such as the instrument, an observation on the sky, or a patch on the sky.
+Some common examples of dimensions used at the Rubin Observatory are listed in Table\,\ref{tab:dimensions}.
+These dimensions and associated coordinates (which can only be strings or integers) are created when new observations are ingested or when new instruments or skymaps are defined.
+
+\begin{table}
+\begin{tabular}{ll}
+\texttt{instrument} &  The instrument that generated this data. \\
+\texttt{band} & Waveband of interest.  \\
+\texttt{detector} & A specific detector within the instrument. \\
+\texttt{physical\_filter} &  Filter used for the exposure. \\
+\texttt{day\_obs} & The observing day. \\
+\texttt{group} &  Group identifier. \\
+\texttt{exposure} & Individual exposure. \\
+\texttt{visit} &  Collection of 1 or 2 exposures. \\
+\texttt{tract} &  Tesselation of the sky. \\
+\texttt{patch} &  Patch within a tract.\\
+\end{tabular}
+\caption{Common dimensions present in the default dimension universe.}
+\label{tab:dimensions}
+\end{table}
+
+\subsection{Dataset Types}
+
+A ``dataset type'' describes an input or an output from a data processing task in a general way.
+The name of the dataset type is meaningful to the pipeline user or scientist with examples such as ``raw'' (a file that comes straight from the instrument), ``calexp'' (a calibrated single exposure), or ``coadd'' (a generic stack of multiple images).
+The dataset type also specifies the relevant dimensions -- a ``raw'' might be described by \texttt{exposure}, \texttt{instrument}, \texttt{detector} but an output co-add might be described by \texttt{tract}, \texttt{patch}, \texttt{skymap}, and \texttt{band}.
+
+The final part of a dataset type is the ``storage class''.
+The storage class is a proxy for the Python type that will be used.
+Along with the Python type it can also describe individual components (such as metadata or image, variance, or mask) which are declared to be retrievable independently, and also specify conversion methods to handle cases where a pipeline task returns something that is compatible with the underlying storage class but is not identical.
+
+\subsection{Collections}
+
+Every dataset in a Butler repository must be stored in a \texttt{RUN} collection.
+This collection can be thought of as representing a folder or directory, although there is no requirement that a file will be written somewhere.
+A single \texttt{RUN} collection can only contain one dataset with a dataset type and data coordinate combination.
+
+A \texttt{CHAINED} collection consists of a list of collections that will be searched in order.
+These collections can contain more \texttt{CHAINED} collections.
+A \texttt{CHAINED} collection is usually created during a data processing campaign and generally consists of all the input collections and a timestamped collection.
+This allows a single output collection to be used to find all the inputs and outputs and the timestamped name allows resubmissions to be stacked using additional timestamped names.
+
+A \texttt{TAGGED} collection is used to create a bespoke collection containing a curated list of datasets.
+The only requirement is that there are no duplicate dataset type / data coordinate combinations.
+
+A \texttt{CALIBRATION} collection is a special type of collection that does allow duplicated dataset type and data coordinate combinations but uses validity timespans to break any ambiguity.
+This allows a raw exposure, which is implicitly anchored in time, to be associated with the relevant processed calibration datasets.
+
+\subsection{Formatters}
+
+When a file-backed datastore is given a Python object it uses the formatter to serialize it to bytes and, conversely, when someone requests a dataset the datastore reads the bytes and uses the formatter to convert it to a Python object.
+The choice of formatter class is controlled by datastore configuration and can be controlled at the storage class or dataset type level.
 
 \section{Moving to the Cloud}
 
@@ -16,10 +77,16 @@ In this scenario the 10,000 science users that the archive was sized to support 
 With the move to SLAC as the archive center this approach was no longer feasible given that SLAC is a Department of Energy facility which has much tighter controls over who can be issued computer accounts and a much more detailed background check.
 Ten thousand accounts would take a significant amount of time to be processed and it was unacceptable to the project that some science users with data rights might not be able to acquire accounts at all.
 
-To solve this problem the project adopted a "hybrid cloud" solution where all the science users will be hosted on a commercial cloud and be given access via their educational instititution's accounts but the data would be stored at the US Data Facility at SLAC.
+To solve this problem the project adopted a ``hybrid cloud'' solution \cite{2024SPIE13101.86Otmp} where all the science users will be using the Rubin Science Platform and be hosted on a commercial cloud where they will be given access via their educational instititution's accounts, but the data would be stored at the US Data Facility at SLAC.
 In this way the DOE would not need to vet 10,000 users and we would proxy access through our infrastructure.
-We prototyped cloud hosting on Google using one of our Data Previews \cite{2021arXiv211115030O} and demonstrated that the deployment and support would work correctly with a few hundred science users.
+We prototyped cloud hosting on Google using one of our Data Previews \cite{2021arXiv211115030O} and demonstrated that the deployment, data access, and user support would work correctly with a few hundred science users.
+The Data Previews, though, stored the data in the cloud and used shared authentication credentials for data access -- for LSST Data Releases the data volume will be too large to host on the cloud, with our current budget profile, and we are required to provide per-user and per-group access controls.
+
+To support this hybrid cloud approach and to provide scalability for 10,000 users on day one of a data release, we were required to rethink our approach to the Butler and re-engineer it to use a client/server architecture.
+In this way the server can use standard Rubin Science Platform authentication, \cite{DMTN-182} utilize signed URLs to access the data at the USDF without requiring SLAC accounts, \cite{DMTN-284} and allow for a backend infrastructure that can make use of cloud resources to scale with spikes in load.
 
 \section{Migrating to a Client/Server Architecture}
+
+
 
 \section{Conclusions}
