@@ -12,7 +12,7 @@ The Rubin Observatory Data Butler concept has been in the data management plan f
 In 2017 \cite{LDM-563} we decided to rewrite the Butler library from scratch to take into account new technologies, clarified requirements, \cite{LDM-556} and lessons learned from previous implementations.
 This version, colloquially known as the ``generation 3 middleware'', was formally accepted by the project in 2022. \cite{DMTR-271}
 
-The Data Butler has been described in a previous paper \cite{2022SPIE12189E..11J} but the important concepts are dimension records, data coordinates, collections, dataset types, and formatters.
+The Data Butler has been described in a previous paper \cite{2022SPIE12189E..11J} but the important concepts of dimension records, data coordinates, collections, dataset types, and formatters are summarized here.
 
 \subsection{Dimension Records and Coordinates}
 
@@ -67,17 +67,19 @@ This allows a raw exposure, which is implicitly anchored in time, to be associat
 
 \subsection{Formatters}
 
-When a file-backed datastore is given a Python object it uses the formatter to serialize it to bytes and, conversely, when someone requests a dataset the datastore reads the bytes and uses the formatter to convert it to a Python object.
-The choice of formatter class is controlled by datastore configuration and can be controlled at the storage class or dataset type level.
+A Butler datastore enables provides an additional abstraction layer within Butler that decouples the serialization and storage of a dataset from knowledge of its existence.
+Datastores exist that can write directly to the Rubin Observatory metrics database \cite{2024SPIE13101.59Ftmp} and talk to multiple datastores as if they were one datastore, but the most commonly-used datastore implementation is one that reads and writes files.
+When a file-backed datastore is given a Python object it uses a Python formatter class to serialize it to bytes and, conversely, when someone requests a dataset the datastore reads the bytes and uses the formatter to convert it to a Python object.
+The choice of formatter class is controlled by datastore configuration and is selected by comparing with the storage class or dataset type.
 
 \section{Moving to the Cloud}
 
 The original operating plan for the LSST was to host the data at the National Center for Supercomputing Applications in Champaign-Urbana. \cite{2012SPIE.8451E..0VF}
 In this scenario the 10,000 science users that the archive was sized to support would all be given accounts directly at the archive center and access would be controlled directly on the file system using ACLs and on the databases using database accounts.
-With the move to SLAC as the archive center this approach was no longer feasible given that SLAC is a Department of Energy facility which has much tighter controls over who can be issued computer accounts and a much more detailed background check.
+With the move to SLAC as the archive center \cite{RTN-021} this approach was no longer feasible given that SLAC is a Department of Energy facility which has much tighter controls over who can be issued computer accounts and a much more detailed background check.
 Ten thousand accounts would take a significant amount of time to be processed and it was unacceptable to the project that some science users with data rights might not be able to acquire accounts at all.
 
-To solve this problem the project adopted a ``hybrid cloud'' solution \cite{2024SPIE13101.86Otmp} where all the science users will be using the Rubin Science Platform and be hosted on a commercial cloud where they will be given access via their educational instititution's accounts, but the data would be stored at the US Data Facility at SLAC.
+To solve this problem the project adopted a ``hybrid cloud'' solution \cite{2024SPIE13101.86Otmp} where all the science users will be using the Rubin Science Platform \cite{LDM-542} and be hosted on a commercial cloud where they will be given access via their educational instititution's accounts, but the data would be stored at the US Data Facility at SLAC.
 In this way the DOE would not need to vet 10,000 users and we would proxy access through our infrastructure.
 We prototyped cloud hosting on Google using one of our Data Previews \cite{2021arXiv211115030O} and demonstrated that the deployment, data access, and user support would work correctly with a few hundred science users.
 The Data Previews, though, stored the data in the cloud and used shared authentication credentials for data access -- for LSST Data Releases the data volume will be too large to host on the cloud, with our current budget profile, and we are required to provide per-user and per-group access controls.
@@ -87,6 +89,29 @@ In this way the server can use standard Rubin Science Platform authentication, \
 
 \section{Migrating to a Client/Server Architecture}
 
+The delivered Butler uses a direct connection to a database (generally PostgreSQL) and direct access to either a POSIX file system, an object store (supporting either Google Cloud Storage or Amazon S3), or a WebDAV server.
+There is no fine-grained access control restricting database access and object store access is generally all or nothing.
+For a POSIX file system datastore it is possible to restrict file system access based on ACLs.
+We call this implementation the ``direct butler'' to distinguish it from the ``remote butler'' that connects to a butler server.
 
+For Data Preview 0.2 \cite{RTN-041} this was the system we used -- anybody could read and write anything with no group or user restrictions.
+For a deployment that was mainly used as a test bed and which was using previously published simulated data this was not an issue.
+This approach to authentication and authorization is acceptable when running batch processing at the USDF where the campaign processing team and developers are Rubin Observatory staff, but a new approach is needed for the hybrid cloud scenario with external science users for formal data releases.
+
+For a formal data release or access to the prompt products database, the requirements become stricter:
+
+\begin{itemize}
+\item Data products are only visible to data rights holders until the two-year proprietary period is exceeded.
+\item Data rights holders can all see the formal data products but can not delete or modify them and can not write to any of the data release collections.
+\item Data rights holders should be allowed to store their own derived products and no-one else should be able to access them or even know they exist.
+\item Data rights holders should be allowed to collaborate with others and make use of shared collections that are private to their group.
+\item File quotas will be used to ensure fairness, although a petition can be made to increase the default quota.
+\end{itemize}
 
 \section{Conclusions}
+
+Converting an existing library that uses direct database and object store connections to one which uses modern web service paradigms, including supporting scalability and security, is a challenging exercise.
+Whilst we realized early on that such a change was needed \cite{DMTN-169,DMTN-176} other priorities and staff resourcing issues meant that we could not really begin to look seriously at the implementation until more recently. \cite{DMTN-282,DMTN-283}
+
+We have made significant progress in the implementation of the client/server Butler this year and it is already deployed with core functionality and used by the Rubin Science Platform Virtual Observatory services. \cite{DMTN-208}
+A system will be deployed in time for Data Preview 1 in early 2025. \cite{RTN-011}
