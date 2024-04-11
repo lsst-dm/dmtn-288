@@ -108,6 +108,140 @@ For a formal data release or access to the prompt products database, the require
 \item File quotas will be used to ensure fairness, although a petition can be made to increase the default quota.
 \end{itemize}
 
+To satisfy these requirements the only option is to move to a web services architecture.
+We refer to this implementation as the ``remote butler'' where the client sends messages to a server, the server checks the authentication tokens, decides whether the user has access to the dataset or collections, and then uses the ``direct butler'' to process the request.
+The server can also sign URLs and return them to the client which is then responsible for retrieving the dataset and reading it into memory.
+
+Replacing direct connections to databases and file systems with a web service does complicate some of the Butler design and we have been forced to make some fairly major internal changes.
+The ``direct butler'' implementation must still work (that is how the server communicates with the registry) but certain assumptions are no longer valid.
+
+For example, during graph-building the direct butler makes use of temporary tables in the database.
+In a stateless client/server with load balancing there is no mechanism to ensure that the client is talking to the same web service or the same database server and so long-lived temporary tables are no longer viable.
+In the following sections some of these difficulties are discussed and solutions proposed.
+
+\subsection{Configuration}
+
+The direct Butler supports configuration via a YAML or JSON file.
+The system was designed from the beginning to allow a butler to be constructed from a single configuration file which could be augmented by the user to override any of the settings including output file formatters, file templating, addition of chained datastores, file-writing compression parameters, and even storage class definitions.
+If they inadvertently modified the registry or datastore definitions in an incompatible way the worst that would happen is that they wouldn't be able to connect to the butler or they might write a file to a datastore that no-one else could read.
+Furthermore, many of the configurations allowed a full Python class name to be specified, for example in the definition of a storage class, or controlling which datastore was loaded.
+
+In a client/server environment this sort of configuration flexibility is not at all desirable for two important reasons.
+Firstly, a server process should not trust anything it gets from a client that can not be vetted, and secondly, a client should not load arbitrary python code based on a message it gets from a, potentially compromised, server.
+
+This realization is requiring us to fundamentally adjust how we treat configuration in the butler:
+
+\begin{itemize}
+\item The ability for a client to inject arbitrary configuration overrides should be reassessed and possibly be replaced by an explicit system for allowing configuration of formatters and write recipes (which are important abilities during testing and development).
+\item Storage class definitions must solely be read from the client system.
+  The server should never need to load a storage class and is not required to have access to the LSST Science Pipelines.
+\item Storage classes must be versioned for each data release (Python types might evolve over the years even if the storage class name remains the same).
+\item Formatters must now be stored in the server as a label rather than a Python class and configuration in the client must map that label to a Python class.
+\item The server issues signed URLs for file upload and therefore the client can not be responsible for defining the file naming template.
+\item The client should not ever see registry configuration.
+\end{itemize}
+
+
+\subsection{Registry Queries}
+
+With potentially 10,000 simultaneous users running queries for datasets and dimension records, it is impossible for one server to be able to handle that load with one database.
+To solve this problem there will be multiple strategies:
+
+\begin{itemize}
+\item
+  Servers will pre-fetch some database dimension records and collection information. \cite{DMTN-289}
+\item
+  Multiple server instances will be deployed with load balancing.
+\item
+  Multiple database server instances will be deployed.
+\item
+  Servers will not run database queries directly, instead they will spawn workers that will run the queries.
+\item
+  The number of queries a single user can execute will be limited and a queuing system employed.
+\end{itemize}
+
+
+\subsubsection{Regular Expressions}\label{regular-expressions}
+
+Some of the existing Butler APIs allow a user to specify a search using a regular expression or a glob.
+Regular expressions are very useful but they are a very bad idea when the regular expression is coming from a potentially untrusted source and can even be a bad idea if a valid user is trying to do something clever and ends up with something that is very complicated.
+It is easy to create a regular expression that can turn into a denial-of-service attack, we are therefore proposing that regular expressions be removed from the public APIs and that we only allow globs.
+
+\subsubsection{Dimension Record Pre-fetching}\label{dimension-record-pre-fetching}
+
+Dimension records are used extensively and in many cases the associated record metadata is required.
+If many clients all request datasets that contain coordinates \texttt{(instrument="LSSTCam", detector=4)} the server should not query the database backend every single time to look up the definitions of those IDs.
+Direct Butler does pre-fetch many common dimension records but the situation in the server is much more complicated where synchronizing a shared cache between many threads becomes the primary concern, and the client code likely doesn't need to cache anything because the definitions will always be sent over the wire from the server.
+
+For a static data release the dimension coordinate space is pre-defined and no new records will be added.
+Even for a live data repository, such as the Prompt Processing repository, certain record categories are only rarely augmented and are relatively small.
+
+For example, the number of \texttt{instrument} records is of order 10, the number of \texttt{physical\_filter} records is of order 1,000, and the number of \texttt{detector} records is of order 1,000.
+These are very common dimensions and pre-fetching them into the server is very important to reduce database load.
+If a new filter is added, this event can be planned for and a mechanism can be in place to invalidate the server copy to allow it to be recreated.
+
+Skymaps and tract/patch definitions are also something that can be considered for pre-fetch.
+
+Even for \texttt{day\_obs} the total number of records is only about 4,000 for LSSTCam over the ten year survey (twice that if LATISS is included) with limited metadata attached to those records, and for a static data release we could consider pre-fetching those.
+
+The situation is different for \texttt{exposure}, \texttt{visit} and \texttt{group} where there can be of order 1,000 of each of those created per night (millions of records).
+Those records (including metadata fields) can not be pre-fetched into the server and must be obtained from the database every time they are needed.
+
+\subsubsection{Collection Caching}\label{collection-caching}
+
+In a full data release where there can be many chained collections as well as tens of thousands of user collections, it is critical that a client request for a collection definition doesn't result in multiple database queries every single time.
+A user will only be allowed to see their own user collections and any group collections they are part of but the total number of collections to manage will be very large.
+
+Caching all the collection definitions in the server might be possible, so long as the cache is shared between server threads, but the issue is knowing when to invalidate the cache.
+A data release will have a large number of unchanging collection definitions combined with user and group collections that can be created or disappear at any time.
+A prompt processing repository will be getting new collections on a daily basis in addition to the user and group collections.
+It might be necessary for specific collections to be marked as permanent to allow the servers to know that those will not be modified, but require database queries for the dynamic collections.
+The approaches to collection caching are still to be worked out and we are investigating reorganizing how collections
+are stored in the database to make queries on them more efficient without the recursion currently used to support chains of datastores with chains of datastores.
+
+It might be simpler for the client to never cache collection information if the server is caching and the client will only ever see a small subset of the total number of collections.
+
+\subsubsection{Multiple Servers}\label{multiple-servers}
+
+A single server, however large, can not reliably handle thousands of simultaneous requests.
+This is not helped by the butler APIs being designed before \texttt{async} was considered stable, requiring the server to create threads for all incoming requests and Python not currently being a language that supports good thread performance.
+
+To allow arbitrary scaling we will deploy multiple server instances with some form of load balancing.
+We are designing the server to be stateless such that any client can talk to any server at any time without having a client pinned to a specific server.
+
+\subsubsection{Multiple Database Servers}\label{multiple-database-servers}
+
+Deploying multiple Butler services allows client requests to be handled at scale but that needs to be matched by database capacity.
+Multiple read-only clones of a data release database can scale relatively easily.
+There is a complication when clients are allowed to store data in the butler in terms of replication to replicas, and this is discussed later.
+
+\subsubsection{Query System}\label{query-system}
+
+Many Butler queries can take minutes or even longer, and it is not desirable to lock up resources in the server process whilst waiting for these queries to complete.
+The solution is to use a system where queries are sent to workers in an execution pool.
+The client will be issued a job ID and can query the server to obtain the worker status.
+The client will initially use polling to determine when a query has completed and we will investigate whether UWS \cite{2016ivoa.spec.1024H} is a reasonable approach.
+Once a job completes the client will receive a URI to the results in either JSON or parquet format.
+These results will be written with an expiry date to allow for automatic cleanup of results that are no longer
+needed.
+Additionally, context managers will be supported to allow the client to send a message to the server when it no longer needs the results.
+If the query resulted in many results they can be written as multiple files and multiple URIs can be returned to allow the client to paginate.
+
+Additionally, a queue system makes it possible for individual users who are doing many queries simultaneously to be rate-limited.
+The system should not look like it is down for people if a single user is submitting hundreds of queries and is ahead of everyone else in the queue.
+
+\subsection{Reading Datasets}
+
+The direct Butler interface supports a generic ``datastore'' abstraction layer with multiple pluggable options.
+Supporting arbitrary datastore configurations is
+
+\subsection{Writing to a Butler Registry}
+
+The biggest complication in implementing client/server Butler is handling writes.
+Clients will rarely need to update dimension records (those are created by instrument registration, raw data ingest, or visit definitions, which are generally thought of as administrative tasks that can, for now, use direct butler connections, although it might be necessary for users to create their own sky map definitions) but Data Rights holders will want to read datasets, construct new datasets derived from them, and store them back in a butler.
+
+We assume that there will be far fewer writes than there will be reads and most of the writes will involve multi-dataset transfers from personal workspaces or from user-batch outputs \cite{DMTN-223} rather than people writing individual datasets from Jupyter notebooks.
+
 \section{Conclusions}
 
 Converting an existing library that uses direct database and object store connections to one which uses modern web service paradigms, including supporting scalability and security, is a challenging exercise.
