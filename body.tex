@@ -137,10 +137,10 @@ This realization is requiring us to fundamentally adjust how we treat configurat
   The server should never need to load a storage class and is not required to have access to the LSST Science Pipelines.
 \item Storage classes must be versioned for each data release (Python types might evolve over the years even if the storage class name remains the same).
 \item Formatters must now be stored in the server as a label rather than a Python class and configuration in the client must map that label to a Python class.
+  A client can not import a fully-qualified Python class name coming from the server.
 \item The server issues signed URLs for file upload and therefore the client can not be responsible for defining the file naming template.
 \item The client should not ever see registry configuration.
 \end{itemize}
-
 
 \subsection{Registry Queries}
 
@@ -241,6 +241,20 @@ The biggest complication in implementing client/server Butler is handling writes
 Clients will rarely need to update dimension records (those are created by instrument registration, raw data ingest, or visit definitions, which are generally thought of as administrative tasks that can, for now, use direct butler connections, although it might be necessary for users to create their own sky map definitions) but Data Rights holders will want to read datasets, construct new datasets derived from them, and store them back in a butler.
 
 We assume that there will be far fewer writes than there will be reads and most of the writes will involve multi-dataset transfers from personal workspaces or from user-batch outputs \cite{DMTN-223} rather than people writing individual datasets from Jupyter notebooks.
+
+In the baseline plan user data will be written to a SLAC object store with the server issuing a signed URL to the client to allow the upload of the file.
+Once the file has been uploaded the client will inform the server to allow the registry to be updated.
+Registry writes do require further thought.
+Quotas will be needed and will likely require the butler to keep track of per-user quota usage -- if a user happens to do multiple writes in parallel there is a chance that they could exceed their quota but we would run daily quota verification jobs to ensure that the butler accounting is accurate.
+
+With multiple replicas of a read-only data release registry we can horizontally scale and support many user queries.
+Once writes are allowed it is necessary for each replica to be notified of that modification and there will be a time where the user who wrote to the registry would not see that update if they were to immediately do a get or a query.
+To simplify the replication and backup situation we are considering using read-only data release registries and a separate user registry -- the user registry should be significantly smaller than the data release registry.
+
+We have not yet decided how many user registries to create: a single user registry for all user data with replicas is one option, but it is also feasible to consider giving each user their own self-contained user registry.
+There is also an intermediate strategy where users are assigned specific user registries, although there is a risk that you could end up with some databases having no user activity and others having all the power users.
+Regardless, multiple registries is a complication for butler where the system has been designed to be able to do joins of user collections with data release collections using the database directly and supporting two or more registries in a single query would lead to more work having to be done by the query worker process, using more memory, in order to do the combination from multiple registries.
+This could also lead to changes in how we do our large quantum graph building where user-batch will require that graphs be built by combining user and data release collections.
 
 \section{Conclusions}
 
