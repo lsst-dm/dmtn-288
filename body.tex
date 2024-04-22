@@ -116,7 +116,7 @@ Replacing direct connections to databases and file systems with a web service do
 The ``direct butler'' implementation must still work (that is how the server communicates with the registry) but certain assumptions are no longer valid.
 
 For example, during graph-building the direct butler makes use of temporary tables in the database.
-In a stateless client/server with load balancing there is no mechanism to ensure that the client is talking to the same web service or the same database server and so long-lived temporary tables are no longer viable.
+In a stateless client/server with load balancing there is no mechanism to ensure that the client is talking to the same web service or the same database server and so long-lived temporary tables may no longer be viable without significant re-architecting.
 In the following sections some of these difficulties are discussed and solutions proposed.
 
 \subsection{Configuration}
