@@ -14,7 +14,7 @@ endif
 export TEXMFHOME ?= lsst-texmf/texmf
 
 #asp tex is a bit odd so latexml fails ..
-$(DOCNAME).pdf: $(tex) local.bib authors.tex
+$(DOCNAME).pdf: $(tex) local.bib authors.tex butler-client-server.pdf butler-direct.pdf
 	latexmk -bibtex -xelatex -f $(DOCNAME)
 
 authors.tex:  authors.yaml

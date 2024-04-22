@@ -12,7 +12,14 @@ The Rubin Observatory Data Butler concept has been in the data management plan f
 In 2017 \cite{LDM-563} we decided to rewrite the Butler library from scratch to take into account new technologies, clarified requirements, \cite{LDM-556} and lessons learned from previous implementations.
 This version, colloquially known as the ``generation 3 middleware'', was formally accepted by the project in 2022. \cite{DMTR-271}
 
-The Data Butler has been described in a previous paper \cite{2022SPIE12189E..11J} but the important concepts of dimension records, data coordinates, collections, dataset types, and formatters are summarized here.
+The Data Butler has been described in a previous paper \cite{2022SPIE12189E..11J} and a simple block diagram is shown in Fig.~\ref{fig:direct}, but the important concepts of dimension records, data coordinates, collections, dataset types, and formatters are summarized here.
+
+\begin{figure}
+\centering
+\includegraphics[width=0.5\textwidth]{butler-direct}
+\caption{The direct butler architecture. A client connects directly to a database and a datastore.\label{fig:direct}}
+\end{figure}
+
 
 \subsection{Dimension Records and Coordinates}
 
@@ -89,6 +96,12 @@ In this way the server can use standard Rubin Science Platform authentication, \
 
 \section{Migrating to a Client/Server Architecture}
 
+\begin{figure}
+\centering
+\includegraphics[width=\textwidth]{butler-client-server}
+\caption{The client/server butler architecture. A client connects directly to a service which mediates the database connection and provides signed URLs to the S3 buckets.\label{fig:server}}
+\end{figure}
+
 The delivered Butler uses a direct connection to a database (generally PostgreSQL) and direct access to either a POSIX file system, an object store (supporting either Google Cloud Storage or Amazon S3), or a WebDAV server.
 There is no fine-grained access control restricting database access and object store access is generally all or nothing.
 For a POSIX file system datastore it is possible to restrict file system access based on ACLs.
@@ -111,6 +124,7 @@ For a formal data release or access to the prompt products database, the require
 To satisfy these requirements the only option is to move to a web services architecture.
 We refer to this implementation as the ``remote butler'' where the client sends messages to a server, the server checks the authentication tokens, decides whether the user has access to the dataset or collections, and then uses the ``direct butler'' to process the request.
 The server can also sign URLs and return them to the client which is then responsible for retrieving the dataset and reading it into memory.
+A block diagram with the architecture is shown in Fig.~\ref{fig:server}.
 
 Replacing direct connections to databases and file systems with a web service does complicate some of the Butler design and we have been forced to make some fairly major internal changes.
 The ``direct butler'' implementation must still work (that is how the server communicates with the registry) but certain assumptions are no longer valid.
