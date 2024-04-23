@@ -76,7 +76,7 @@ This allows a raw exposure, which is implicitly anchored in time, to be associat
 
 \subsection{Formatters}
 
-A Butler datastore enables provides an additional abstraction layer within Butler that decouples the serialization and storage of a dataset from knowledge of its existence.
+A Butler datastore provides an additional abstraction layer within Butler that decouples the serialization and storage of a dataset from knowledge of its existence.
 Datastores exist that can write directly to the Rubin Observatory metrics database \cite{2024SPIE13101.59Ftmp} and talk to multiple datastores as if they were one datastore, but the most commonly-used datastore implementation is one that reads and writes files.
 When a file-backed datastore is given a Python object it uses a Python formatter class to serialize it to bytes and, conversely, when someone requests a dataset the datastore reads the bytes and uses the formatter to convert it to a Python object.
 The choice of formatter class is controlled by datastore configuration and is selected by comparing with the storage class or dataset type.
@@ -143,7 +143,7 @@ If they inadvertently modified the registry or datastore definitions in an incom
 Furthermore, many of the configurations allowed a full Python class name to be specified, for example in the definition of a storage class, or controlling which datastore was loaded.
 
 In a client/server environment this sort of configuration flexibility is not at all desirable for two important reasons.
-Firstly, a server process should not trust anything it gets from a client that can not be vetted, and secondly, a client should not load arbitrary python code based on a message it gets from a, potentially compromised, server.
+Firstly, a server process should not trust anything it gets from a client that can not be vetted, and secondly, a client should not load arbitrary Python code based on a message it gets from a, potentially compromised, server.
 
 This realization is requiring us to fundamentally adjust how we treat configuration in the butler:
 
@@ -253,7 +253,7 @@ Supporting arbitrary datastore configurations allows a single butler to store da
 It is even possible for users to override datastore configurations to add their own additional datastores into the chain.
 For client/server Butler this flexibility is an unwanted complication since it weakens the security model and adds unnecesary complexity.
 The client/server design therefore enforces support solely for file-backed datastores where the server process issues signed URLs to allow the client to download only the datasets they have been approved to see.
-The client is responsible for interpreting the formatter name specified by the server to allow it to use the correct python code for converting the file back into a python object.
+The client is responsible for interpreting the formatter name specified by the server to allow it to use the correct Python code for converting the file back into a Python object.
 
 \subsection{Writing to a Butler}
 
