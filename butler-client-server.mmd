@@ -1,14 +1,22 @@
 flowchart LR
-    A["Butler Python\nclient library"] --> B["Rubin Science Platform\nHTTP Ingress"]
-    A <--> C[("S3 Bucket\n(Datastore)")]
-    D[("S3 Bucket\n(Query Results)")] --> A
-    B --> E[Butler Server]
-    E --> F[(Redis)]
-    E --> G[("Postgres DB\nPrimary")]
-    G --> H[("Postgres DB\nReplicas")]
-    F <--> I[Query workers]
+    A["Butler Python\nclient library"]
+    B["Rubin Science Platform\nHTTP Ingress"]
+    C[("S3 Bucket\n(Datastore)")]
+    D[("S3 Bucket\n(Query Results)")]
+    E[Butler Server]
+    F[(Redis)]
+    G[("Postgres DB\nPrimary")]
+    H[("Postgres DB\nReplicas")]
+    I[Query workers]
+    A --> B
+    A --> C
+    A --> D
+    B --> E
+    E --> F
+    E --> G
+    G --> H
+    F <---> I
     I --> H
     I --> D
-    
 
   
