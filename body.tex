@@ -149,16 +149,16 @@ This realization is requiring us to fundamentally adjust how we treat configurat
 
 \begin{itemize}
 \item The ability for a client to inject arbitrary configuration overrides should be reassessed and possibly be replaced by an explicit system for allowing configuration of formatters and write recipes (which are important abilities during testing and development).
-\item Storage class definitions must solely be read from the client system.
-  The server should never need to load a storage class and is not required to have access to the LSST Science Pipelines.
+\item Storage class definitions, the underlying Python types of datasets stored in a Butler, must solely be read from the client system.
+  The server should never need to load any Python code associated with the datasets being stored, and in particular, a server deployment should not need to have access to the full suite of LSST Science Pipelines Python code.
 \item Storage classes must be versioned for each data release (Python types might evolve over the years even if the storage class name remains the same).
 \item Formatters must now be stored in the server as a label rather than a Python class and configuration in the client must map that label to a Python class.
   A client can not import a fully-qualified Python class name coming from the server.
 \item The server issues signed URLs for file upload and therefore the client can not be responsible for defining the file naming template.
-\item The client should not ever see registry configuration.
+\item The client should not ever see registry database configuration.
 \end{itemize}
 
-\subsection{Registry Queries}
+\subsection{Registry Database Queries}
 
 With potentially 10,000 simultaneous users running queries for datasets and dimension records, it is impossible for one server to be able to handle that load with one database.
 To solve this problem there will be multiple strategies:
@@ -181,7 +181,7 @@ To solve this problem there will be multiple strategies:
 
 Some of the existing Butler APIs allow a user to specify a search using a regular expression or a glob.
 Regular expressions are very useful but they are a very bad idea when the regular expression is coming from a potentially untrusted source and can even be a bad idea if a valid user is trying to do something clever and ends up with something that is very complicated.
-It is easy to create a regular expression that can turn into a denial-of-service attack, we are therefore proposing that regular expressions be removed from the public APIs and that we only allow globs.
+It is easy to create a regular expression that can turn into a denial-of-service attack, and we are therefore proposing that regular expressions be removed from the public APIs and that we only allow globs.
 
 \subsubsection{Dimension Record Pre-fetching}\label{dimension-record-pre-fetching}
 
@@ -249,7 +249,7 @@ The system should not look like it is down for people if a single user is submit
 \subsection{Reading Datasets}
 
 The direct Butler interface supports a generic ``datastore'' abstraction layer with multiple pluggable options.
-Supporting arbitrary datastore configurations allows a single butler to store datasets in file-backed datastores or datastores that use databases such as the Sasquatch system.\cite{2024SPIE13101.59Ftmp}
+Supporting arbitrary datastore configurations allows a single butler to store datasets as files and to define datastores that use databases such as the Sasquatch system.\cite{2024SPIE13101.59Ftmp}
 It is even possible for users to override datastore configurations to add their own additional datastores into the chain.
 For client/server Butler this flexibility is an unwanted complication since it weakens the security model and adds unnecesary complexity.
 The client/server design therefore enforces support solely for file-backed datastores where the server process issues signed URLs to allow the client to download only the datasets they have been approved to see.
@@ -272,7 +272,7 @@ Once writes are allowed it is necessary for each replica to be notified of that 
 To simplify the replication and backup situation we are considering using read-only data release registry databases and a separate user registry database -- the user registry should be significantly smaller than the data release registry.
 
 We have not yet decided how many user databases to create: a single user database server for all user data with replicas is one option, but it is also feasible to consider giving each user their own self-contained user registry as a namespace within a larger database server.
-There is also an intermediate strategy where users are assigned specific user databases, although there is a risk that you could end up with some databases having no user activity and others having all the power users.
+There is also an intermediate strategy where users are assigned specific user databases, although there is a risk that you could end up with some databases having no user activity and others having all the power users; something that would require migrating users to different servers to balance load.
 Regardless, multiple registries is a complication for butler where the system has been designed to be able to do joins of user collections with data release collections using the database directly and supporting two or more registry databases in a single query would lead to more work having to be done by the query worker process, using more memory, in order to do the combination from multiple registry databases.
 
 This is particularly problematic when we come to do our user-batch processing where we build up workflow execution graphs.\cite{2022arXiv221115795G,2023arXiv230303313L}
